@@ -1,18 +1,18 @@
 /**
- * Copyright (c) 2026 HOOX · HOOX · jango-blockchained
+ * Copyright (c) 2026 HOOX · HOOX · jango-blockchained (hoox-sh)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Errors, toError } from "@jango-blockchained/hoox-shared/errors";
+import { Errors, toError } from "@hoox-sh/hoox-shared/errors";
 import {
   trackAnalytics,
   type AnalyticsEnv,
-} from "@jango-blockchained/hoox-shared/analytics";
+} from "@hoox-sh/hoox-shared/analytics";
 import {
   timingSafeEqual,
   type Logger,
-} from "@jango-blockchained/hoox-shared/middleware";
-import { KVKeys } from "@jango-blockchained/hoox-shared/kvKeys";
+} from "@hoox-sh/hoox-shared/middleware";
+import { KVKeys } from "@hoox-sh/hoox-shared/kvKeys";
 import {
   generateEmbeddings,
   queryEmbeddings,

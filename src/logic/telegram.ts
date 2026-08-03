@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 HOOX · HOOX · jango-blockchained
+ * Copyright (c) 2026 HOOX · HOOX · jango-blockchained (hoox-sh)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -7,12 +7,12 @@ import {
   Errors,
   createJsonResponse,
   toError,
-} from "@jango-blockchained/hoox-shared/errors";
+} from "@hoox-sh/hoox-shared/errors";
 import {
   trackAnalytics,
   type AnalyticsEnv,
-} from "@jango-blockchained/hoox-shared/analytics";
-import type { Logger } from "@jango-blockchained/hoox-shared/middleware";
+} from "@hoox-sh/hoox-shared/analytics";
+import type { Logger } from "@hoox-sh/hoox-shared/middleware";
 import type { R2ObjectBody } from "@cloudflare/workers-types";
 
 /** Shape of the Telegram Bot API response we consume. */

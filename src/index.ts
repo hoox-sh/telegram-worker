@@ -1,27 +1,27 @@
 /**
- * Copyright (c) 2026 HOOX · HOOX · jango-blockchained
+ * Copyright (c) 2026 HOOX · HOOX · jango-blockchained (hoox-sh)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import {
   type EnvWithKV,
   logKvTimestamp,
-} from "@jango-blockchained/hoox-shared/kvUtils"; // Import shared function
+} from "@hoox-sh/hoox-shared/kvUtils"; // Import shared function
 // KVNamespace, Ai, VectorizeIndex, R2Bucket types are globally available from worker-configuration.d.ts
 import {
   Errors,
   createJsonResponse,
   toError,
-} from "@jango-blockchained/hoox-shared/errors";
-import type { AnalyticsEnv } from "@jango-blockchained/hoox-shared/analytics";
+} from "@hoox-sh/hoox-shared/errors";
+import type { AnalyticsEnv } from "@hoox-sh/hoox-shared/analytics";
 import {
   createLogger,
   requireInternalAuth,
   withRequestLog,
-} from "@jango-blockchained/hoox-shared/middleware";
-import { TELEGRAM_ALERT_AUTH_KEY_FIELDS } from "@jango-blockchained/hoox-shared/service-bindings";
-import { createRouter } from "@jango-blockchained/hoox-shared/router";
-import { healthCheck } from "@jango-blockchained/hoox-shared/health";
+} from "@hoox-sh/hoox-shared/middleware";
+import { TELEGRAM_ALERT_AUTH_KEY_FIELDS } from "@hoox-sh/hoox-shared/service-bindings";
+import { createRouter } from "@hoox-sh/hoox-shared/router";
+import { healthCheck } from "@hoox-sh/hoox-shared/health";
 
 import { handleWebhookRequest } from "./handlers/webhook";
 import { sendTelegramNotification } from "./logic/telegram";
