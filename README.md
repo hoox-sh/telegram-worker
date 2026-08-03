@@ -9,7 +9,7 @@
 
 ---
 
-The telegram-worker is the bi-directional notification hub for the HOOX mesh. Six workers — [`hoox`](../hoox), [`trade-worker`](../trade-worker), [`agent-worker`](../agent-worker), [`report-worker`](../report-worker), [`web3-wallet-worker`](../web3-wallet-worker), and [`email-worker`](../email-worker) — fire notifications through its service binding. Outbound messages (trade confirmations, AI-generated market summaries, emergency risk alerts, PDF delivery notices) are sent via the Telegram Bot API to configured `chat_id` targets.
+The telegram-worker is the bi-directional notification hub for the HOOX mesh. Six workers — [`hoox`](https://github.com/hoox-sh/hoox-worker), [`trade-worker`](https://github.com/hoox-sh/trade-worker), [`agent-worker`](https://github.com/hoox-sh/agent-worker), [`report-worker`](https://github.com/hoox-sh/report-worker), [`web3-wallet-worker`](https://github.com/hoox-sh/web3-wallet-worker), and [`email-worker`](https://github.com/hoox-sh/email-worker) — fire notifications through its service binding. Outbound messages (trade confirmations, AI-generated market summaries, emergency risk alerts, PDF delivery notices) are sent via the Telegram Bot API to configured `chat_id` targets.
 
 Inbound, the worker processes Telegram commands (`/ask`, `/search`) with optional Workers AI summarization and RAG context retrieval through Cloudflare Vectorize (`my-rag-index`). Embeddings are generated on-the-fly and queried against the RAG index for context-aware responses.
 
@@ -31,7 +31,7 @@ web3-wallet ──┘        │
 
 | Direction         | Worker                                                                                                                                                                                                         | Binding            |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Inbound (callers) | [`hoox`](../hoox), [`trade-worker`](../trade-worker), [`agent-worker`](../agent-worker), [`report-worker`](../report-worker), [`web3-wallet-worker`](../web3-wallet-worker), [`email-worker`](../email-worker) | `TELEGRAM_SERVICE` |
+| Inbound (callers) | [`hoox`](https://github.com/hoox-sh/hoox-worker), [`trade-worker`](https://github.com/hoox-sh/trade-worker), [`agent-worker`](https://github.com/hoox-sh/agent-worker), [`report-worker`](https://github.com/hoox-sh/report-worker), [`web3-wallet-worker`](https://github.com/hoox-sh/web3-wallet-worker), [`email-worker`](https://github.com/hoox-sh/email-worker) | `TELEGRAM_SERVICE` |
 
 ### Entry Points
 
@@ -55,6 +55,40 @@ web3-wallet ──┘        │
 ```bash
 bun test workers/telegram-worker
 ```
+
+### Mesh interconnect
+
+| Direction | Peers |
+| --------- | ----- |
+| **Called by** | [hoox-worker](https://github.com/hoox-sh/hoox-worker), [trade-worker](https://github.com/hoox-sh/trade-worker), [agent-worker](https://github.com/hoox-sh/agent-worker), [report-worker](https://github.com/hoox-sh/report-worker), [web3-wallet-worker](https://github.com/hoox-sh/web3-wallet-worker), [email-worker](https://github.com/hoox-sh/email-worker). |
+| **This worker calls** | See list below |
+
+- **[analytics-worker](https://github.com/hoox-sh/analytics-worker)** — ANALYTICS_SERVICE — delivery telemetry
+
+Full mesh (all isolates live as git submodules under [`hoox-sh/hoox`](https://github.com/hoox-sh/hoox) `workers/`):
+
+| Isolate | Role | Repository |
+| ------- | ---- | ---------- |
+| [hoox-worker](https://github.com/hoox-sh/hoox-worker) | Public webhook gateway (WAF, idempotency, dispatch) | monorepo `workers/hoox-worker` |
+| [trade-worker](https://github.com/hoox-sh/trade-worker) | Multi-exchange order execution (Binance / Bybit / MEXC) | monorepo `workers/trade-worker` |
+| [agent-worker](https://github.com/hoox-sh/agent-worker) | AI risk manager (5-min cron, kill switch) | monorepo `workers/agent-worker` |
+| [d1-worker](https://github.com/hoox-sh/d1-worker) | D1 SQL proxy + settings / balances / positions | monorepo `workers/d1-worker` |
+| [telegram-worker](https://github.com/hoox-sh/telegram-worker) | Alerts, bot commands, RAG copilot | monorepo `workers/telegram-worker` |
+| [email-worker](https://github.com/hoox-sh/email-worker) | Mailgun / email signal parsing → trade | monorepo `workers/email-worker` |
+| [analytics-worker](https://github.com/hoox-sh/analytics-worker) | Analytics Engine write + query path | monorepo `workers/analytics-worker` |
+| [report-worker](https://github.com/hoox-sh/report-worker) | PDF reports via Browser Rendering → R2 | monorepo `workers/report-worker` |
+| [web3-wallet-worker](https://github.com/hoox-sh/web3-wallet-worker) | On-chain wallet identity (ethers.js) | monorepo `workers/web3-wallet-worker` |
+| [dashboard](https://github.com/hoox-sh/hoox/tree/main/workers/dashboard) | Next.js ops console (OpenNext, public) | monorepo `workers/dashboard` |
+
+### Docs & monorepo
+
+| Resource | Link |
+| -------- | ---- |
+| Isolate profile (operators) | [https://docs.hoox.sh/docs/devops/workers/telegram-worker](https://docs.hoox.sh/docs/devops/workers/telegram-worker) |
+| Parent monorepo | [github.com/hoox-sh/hoox](https://github.com/hoox-sh/hoox) |
+| This repository | [github.com/hoox-sh/telegram-worker](https://github.com/hoox-sh/telegram-worker) |
+| Workers index | [docs.hoox.sh → Workers](https://docs.hoox.sh/docs/devops/workers) |
+| CLI | `@hoox-sh/hoox-cli` · `hoox deploy worker telegram-worker` |
 
 ### License
 

@@ -1,7 +1,7 @@
 {
   "name": "telegram-worker",
   "version": "1.0.0",
-  "description": "Telegram notification service",
+  "description": "HOOX notification worker: Telegram Bot API alerts, RAG copilot (/ask, /search), Vectorize + Workers AI, fan-in from the mesh.",
   "license": "Apache-2.0",
   "main": "src/index.js",
   "type": "module",
@@ -22,5 +22,9 @@
     "typescript": "^6.0.3",
     "wrangler": "^4.95.0"
   },
-  "author": "jango-blockchained (hoox-sh)"
+  "author": "jango-blockchained (hoox-sh)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hoox-sh/telegram-worker.git"
+  }
 }
