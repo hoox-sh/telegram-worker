@@ -46,6 +46,7 @@ export interface Env extends Cloudflare.Env, AnalyticsEnv, EnvWithKV {
 interface NotificationPayload {
   message: string;
   chatId?: string; // Optional: if not provided, use default from TG_CHAT_ID_BINDING
+  parseMode?: string; // Optional: HTML | Markdown | MarkdownV2 (default HTML)
 }
 
 // --- Constants ---
@@ -81,19 +82,16 @@ router.post(
   }
 );
 
-// POST /process — legacy endpoint, redirects to /alert
+// POST /process — legacy alias for /alert (service bindings do not follow redirects)
 router.post(
   PROCESS_ENDPOINT,
-  async (_request: Request, env: Env, ctx: ExecutionContext) => {
+  async (request: Request, env: Env, ctx: ExecutionContext) => {
     ctx.waitUntil(
       logKvTimestamp(env, "CONFIG_KV").catch((err) =>
         logger.error("logKvTimestamp failed", { error: String(err) })
       )
     );
-    return Response.redirect(
-      new URL(ALERT_ENDPOINT, _request.url).toString(),
-      308
-    );
+    return await handleAlertRequest(request, env, ctx);
   }
 );
 
@@ -162,6 +160,13 @@ async function handleAlertRequest(
       typeof body.requestId === "string" ? body.requestId : "unknown";
 
     // Normalize nested vs flat payload shapes
+    const parseModeFrom = (obj: Record<string, unknown>): string | undefined =>
+      typeof obj.parseMode === "string"
+        ? obj.parseMode
+        : typeof obj.parse_mode === "string"
+          ? obj.parse_mode
+          : undefined;
+
     let notification: NotificationPayload | null = null;
     if (
       body.payload &&
@@ -172,7 +177,13 @@ async function handleAlertRequest(
       if (typeof p.message === "string") {
         notification = {
           message: p.message,
-          chatId: typeof p.chatId === "string" ? p.chatId : undefined,
+          chatId:
+            typeof p.chatId === "string"
+              ? p.chatId
+              : typeof p.chatId === "number"
+                ? String(p.chatId)
+                : undefined,
+          parseMode: parseModeFrom(p),
         };
       }
     } else if (typeof body.message === "string") {
@@ -184,6 +195,7 @@ async function handleAlertRequest(
             : typeof body.chatId === "number"
               ? String(body.chatId)
               : undefined,
+        parseMode: parseModeFrom(body),
       };
     }
 

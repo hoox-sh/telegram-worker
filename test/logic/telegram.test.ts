@@ -277,38 +277,70 @@ describe("handleGetLatestTradeSignalR2", () => {
   });
 
   test("returns null when bucket is empty", async () => {
+    // Canonical keys miss, then list under signals/ is empty
+    mockR2Bucket.get.mockResolvedValue(null);
     mockR2Bucket.list.mockResolvedValueOnce({ objects: [] });
 
     const result = await handleGetLatestTradeSignalR2(mockEnv, mockLogger);
 
     expect(result).toBeNull();
     expect(mockLogger.info).toHaveBeenCalledWith(
-      "No objects found in R2 bucket."
+      "No objects found in R2 bucket under signals/."
     );
   });
 
-  test("returns object body when found", async () => {
+  test("returns object body from canonical key", async () => {
     const mockObject = {
-      key: "signals/latest.json",
+      key: "latest_trade_signal.json",
       body: "signal data",
       writeHttpMetadata: mock(),
     };
-    mockR2Bucket.list.mockResolvedValueOnce({
-      objects: [mockObject],
+    mockR2Bucket.get.mockImplementation(async (key: string) => {
+      if (key === "latest_trade_signal.json") return mockObject;
+      return null;
     });
-    mockR2Bucket.get.mockResolvedValueOnce(mockObject);
 
     const result = await handleGetLatestTradeSignalR2(mockEnv, mockLogger);
 
     expect(result).toBe(mockObject);
-    expect(mockR2Bucket.get).toHaveBeenCalledWith("signals/latest.json");
+    expect(mockR2Bucket.get).toHaveBeenCalledWith("latest_trade_signal.json");
   });
 
-  test("returns null when object body is null", async () => {
-    mockR2Bucket.list.mockResolvedValueOnce({
-      objects: [{ key: "signals/latest.json" }],
+  test("falls back to signals/ list when canonical keys miss", async () => {
+    const mockObject = {
+      key: "signals/older.json",
+      body: "signal data",
+      uploaded: new Date("2026-01-02"),
+      writeHttpMetadata: mock(),
+    };
+    mockR2Bucket.get.mockImplementation(async (key: string) => {
+      if (key === "signals/older.json") return mockObject;
+      return null;
     });
-    mockR2Bucket.get.mockResolvedValueOnce(null);
+    mockR2Bucket.list.mockResolvedValueOnce({
+      objects: [
+        {
+          key: "signals/older.json",
+          uploaded: new Date("2026-01-02"),
+        },
+        {
+          key: "signals/oldest.json",
+          uploaded: new Date("2026-01-01"),
+        },
+      ],
+    });
+
+    const result = await handleGetLatestTradeSignalR2(mockEnv, mockLogger);
+
+    expect(result).toBe(mockObject);
+    expect(mockR2Bucket.get).toHaveBeenCalledWith("signals/older.json");
+  });
+
+  test("returns null when listed object body is null", async () => {
+    mockR2Bucket.get.mockResolvedValue(null);
+    mockR2Bucket.list.mockResolvedValueOnce({
+      objects: [{ key: "signals/latest.json", uploaded: new Date() }],
+    });
 
     const result = await handleGetLatestTradeSignalR2(mockEnv, mockLogger);
 
@@ -319,7 +351,7 @@ describe("handleGetLatestTradeSignalR2", () => {
   });
 
   test("returns null and logs error when R2 operation throws", async () => {
-    mockR2Bucket.list.mockRejectedValueOnce(new Error("R2 connection failed"));
+    mockR2Bucket.get.mockRejectedValueOnce(new Error("R2 connection failed"));
 
     const result = await handleGetLatestTradeSignalR2(mockEnv, mockLogger);
 

@@ -35,11 +35,12 @@ web3-wallet ──┘        │
 
 ### Entry Points
 
-| Method | Path       | Auth         | Description                                     |
-| ------ | ---------- | ------------ | ----------------------------------------------- |
-| `POST` | `/webhook` | Internal key | Primary notification endpoint (service binding) |
-| `POST` | `/process` | Internal key | Legacy notification processing                  |
-| `GET`  | `/health`  | None         | Liveness probe                                  |
+| Method | Path       | Auth                                      | Description                                              |
+| ------ | ---------- | ----------------------------------------- | -------------------------------------------------------- |
+| `POST` | `/alert`   | `X-Internal-Auth-Key` (fail-closed)       | Primary notification endpoint (service binding)          |
+| `POST` | `/process` | `X-Internal-Auth-Key` (fail-closed)       | Legacy alias for `/alert` (same handler)                 |
+| `POST` | `/webhook` | `X-Telegram-Bot-Api-Secret-Token` + chat allowlist | Telegram Bot API ingress (commands, RAG, photos) |
+| `GET`  | `/health`  | None                                      | Liveness probe                                           |
 
 ### Capabilities
 

@@ -22,11 +22,16 @@ interface TelegramApiResponse {
   result?: unknown;
 }
 
+/** Telegram Bot API hard limit for sendMessage text. */
+const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
+
+const ALLOWED_PARSE_MODES = new Set(["HTML", "Markdown", "MarkdownV2"]);
+
 /**
  * Core logic to send a Telegram message.
  */
 export async function sendTelegramNotification(
-  payload: { message: string; chatId?: string },
+  payload: { message: string; chatId?: string; parseMode?: string },
   env: Env,
   ctx: ExecutionContext,
   logger: Logger,
@@ -46,6 +51,20 @@ export async function sendTelegramNotification(
     throw new Error("Telegram chatId not configured");
   }
 
+  const parseMode =
+    payload.parseMode && ALLOWED_PARSE_MODES.has(payload.parseMode)
+      ? payload.parseMode
+      : "HTML";
+
+  // Truncate to Telegram limit (fail-soft, never throw for length)
+  let text = payload.message;
+  if (text.length > TELEGRAM_MAX_MESSAGE_LENGTH) {
+    logger.warn(
+      `[${requestId}] Truncating Telegram message from ${text.length} to ${TELEGRAM_MAX_MESSAGE_LENGTH} chars`
+    );
+    text = text.slice(0, TELEGRAM_MAX_MESSAGE_LENGTH - 1) + "…";
+  }
+
   const telegramApiUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
   const response = await fetch(telegramApiUrl, {
@@ -55,8 +74,8 @@ export async function sendTelegramNotification(
     },
     body: JSON.stringify({
       chat_id: chatId,
-      text: payload.message,
-      parse_mode: "HTML",
+      text,
+      parse_mode: parseMode,
       disable_web_page_preview: true,
     }),
     signal: AbortSignal.timeout(10000),
@@ -142,8 +161,17 @@ export async function sendTelegramReply(
   }
 }
 
+/** Canonical keys written by mesh peers for the latest signal snapshot. */
+const LATEST_SIGNAL_KEYS = [
+  "latest_trade_signal.json",
+  "signals/latest.json",
+  "trade-signals/latest.json",
+] as const;
+
 /**
  * Fetches the latest trade signal object from R2.
+ * Prefers known canonical keys (order is not guaranteed by R2 list),
+ * then falls back to listing under the `signals/` prefix by uploaded date.
  */
 export async function handleGetLatestTradeSignalR2(
   env: Env,
@@ -155,17 +183,33 @@ export async function handleGetLatestTradeSignalR2(
   }
 
   try {
-    logger.info("Listing objects in R2 bucket...");
+    // 1. Try canonical keys first (deterministic)
+    for (const key of LATEST_SIGNAL_KEYS) {
+      const objectBody = await env.UPLOADS_BUCKET.get(key);
+      if (objectBody) {
+        logger.info(`Found latest signal at canonical key: ${key}`);
+        return objectBody as unknown as R2ObjectBody;
+      }
+    }
+
+    // 2. Fallback: list signals/ prefix and pick most recently uploaded
+    logger.info("Canonical signal keys missing; listing signals/ prefix...");
     const listed = await env.UPLOADS_BUCKET.list({
-      limit: 1,
+      prefix: "signals/",
+      limit: 100,
     });
 
     if (listed.objects.length === 0) {
-      logger.info("No objects found in R2 bucket.");
+      logger.info("No objects found in R2 bucket under signals/.");
       return null;
     }
 
-    const latestObject = listed.objects[0];
+    const latestObject = [...listed.objects].sort((a, b) => {
+      const aTime = a.uploaded ? new Date(a.uploaded).getTime() : 0;
+      const bTime = b.uploaded ? new Date(b.uploaded).getTime() : 0;
+      return bTime - aTime;
+    })[0];
+
     logger.info(`Found latest object: ${latestObject.key}`);
 
     const objectBody = await env.UPLOADS_BUCKET.get(latestObject.key);
