@@ -362,3 +362,38 @@ describe("handleGetLatestTradeSignalR2", () => {
     );
   });
 });
+
+describe("sendTelegramNotification message truncation", () => {
+  test("truncates messages longer than Telegram max length", async () => {
+    const mockFetch = mock().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
+        status: 200,
+      })
+    );
+    global.fetch = mockFetch as any;
+    const mockLogger = {
+      info: mock(),
+      error: mock(),
+      warn: mock(),
+      debug: mock(),
+    };
+    const env = {
+      TG_BOT_TOKEN_BINDING: "token",
+      TG_CHAT_ID_BINDING: "123",
+    };
+    const ctx = { waitUntil: () => {} } as any;
+    const longMsg = "x".repeat(5000);
+
+    await sendTelegramNotification(
+      { message: longMsg },
+      env as any,
+      ctx,
+      mockLogger as any
+    );
+
+    expect(mockLogger.warn).toHaveBeenCalled();
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.text.length).toBeLessThanOrEqual(4096);
+    expect(body.text.endsWith("…")).toBe(true);
+  });
+});
