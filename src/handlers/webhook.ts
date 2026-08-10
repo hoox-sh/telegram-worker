@@ -13,6 +13,7 @@ import {
   type Logger,
 } from "@hoox-sh/hoox-shared/middleware";
 import { KVKeys } from "@hoox-sh/hoox-shared/kvKeys";
+import { checkKillSwitch } from "@hoox-sh/hoox-shared/kill-switch";
 import {
   generateEmbeddings,
   queryEmbeddings,
@@ -239,11 +240,20 @@ export async function handleWebhookRequest(
       await sendTelegramReply(chatId, welcomeText, env, logger);
     } else if (messageText === "/status") {
       logger.info("Processing /status command...");
-      const killSwitch = await env.CONFIG_KV.get(KVKeys.KV_TRADE_KILL_SWITCH);
-      const isKillSwitchActive = killSwitch === "true" || killSwitch === "True";
+      // Shared semantics: both trade + global keys, truthy flags (true/1/yes/on).
+      // Status is informational — fail-open on missing KV so the bot still replies.
+      const killResult = await checkKillSwitch(env.CONFIG_KV, {
+        onMissingKv: "open",
+        onReadError: "open",
+      });
+      const isKillSwitchActive = killResult.enabled;
       const statusIcon = isKillSwitchActive ? "🚫" : "✅";
+      const sourceSuffix =
+        isKillSwitchActive && killResult.source
+          ? ` \\(source: ${escapeMarkdownV2(killResult.source)}\\)`
+          : "";
       const statusText = isKillSwitchActive
-        ? "ACTIVE \\- all trading halted"
+        ? `ACTIVE \\- all trading halted${sourceSuffix}`
         : "INACTIVE \\- trading permitted";
       await sendTelegramReply(
         chatId,
