@@ -101,7 +101,10 @@ export async function readJsonBody(
 
   let text: string;
   try {
-    text = new TextDecoder("utf-8", { fatal: false }).decode(merged);
+    text = new TextDecoder("utf-8", {
+      fatal: false,
+      ignoreBOM: true,
+    }).decode(merged);
   } catch {
     return {
       ok: false,
