@@ -573,6 +573,10 @@ async function handlePhotoMessage(
   try {
     // 1. Get the largest photo (last in the array)
     const largestPhoto = message.photo[message.photo.length - 1];
+    if (!largestPhoto) {
+      logger.error("Photo array was empty");
+      return new Response("OK", { status: 200 });
+    }
     const fileId = largestPhoto.file_id;
     const fileExt = largestPhoto.file_id.startsWith("AQA") ? "jpg" : "jpg"; // Telegram uses JPEG
 

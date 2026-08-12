@@ -209,6 +209,10 @@ export async function handleGetLatestTradeSignalR2(
       const bTime = b.uploaded ? new Date(b.uploaded).getTime() : 0;
       return bTime - aTime;
     })[0];
+    if (!latestObject) {
+      logger.info("No objects found after sort under signals/.");
+      return null;
+    }
 
     logger.info(`Found latest object: ${latestObject.key}`);
 

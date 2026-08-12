@@ -91,11 +91,17 @@ export async function insertEmbeddings(
   }
 
   // Prepare data for insertion
-  const dataToInsert = vectors.map((vector, index) => ({
-    id: metadata[index].messageId, // Use messageId as the vector ID
-    values: vector,
-    metadata: metadata[index] as unknown as Record<string, unknown>, // Store the whole metadata object
-  }));
+  const dataToInsert = vectors.flatMap((vector, index) => {
+    const meta = metadata[index];
+    if (!meta) return [];
+    return [
+      {
+        id: meta.messageId, // Use messageId as the vector ID
+        values: vector,
+        metadata: meta as unknown as Record<string, unknown>, // Store the whole metadata object
+      },
+    ];
+  });
 
   if (dataToInsert.length === 0) {
     logger.info("No data to insert into Vectorize.");
