@@ -159,10 +159,12 @@ const mockCtx = {
 describe("Telegram Worker", () => {
   const TEST_INTERNAL_KEY = "test-internal-key";
   const TEST_BOT_TOKEN = "test-bot-token";
-  const TEST_CHAT_ID = "default-chat-id";
+  // Numeric Telegram chat IDs only (outbound allowlist validates format)
+  const TEST_CHAT_ID = "123456789";
   let mockEnv: MockEnvForTest;
   let fetchMock: ReturnType<typeof mock>;
-  const validNotification = { message: "...", chatId: 123 };
+  // Explicit chatId must match TG_CHAT_ID_BINDING when AUTHORIZED_CHAT_IDS is unset
+  const validNotification = { message: "...", chatId: 123456789 };
   const validNotificationDefaultChat = { message: "..." };
 
   beforeEach(() => {
@@ -484,12 +486,146 @@ describe("Telegram Worker", () => {
     expect(responseData.error).toContain("(404)");
     expect(responseData.error).toContain("Chat not found");
   });
+
+  test("rejects arbitrary chatId when AUTHORIZED_CHAT_IDS is unset (outbound fail-closed)", async () => {
+    // Defense-in-depth: without an allowlist only TG_CHAT_ID_BINDING is permitted.
+    // Public gateway notify is separately fail-closed via TELEGRAM_ALLOWED_CHAT_IDS.
+    mockEnv = createMockEnv({
+      internalKey: TEST_INTERNAL_KEY,
+      botToken: TEST_BOT_TOKEN,
+      chatId: TEST_CHAT_ID,
+      webhookSecret: undefined,
+      authorizedChatIds: undefined,
+    });
+    const request = new Request(
+      `https://telegram-worker.workers.dev${PROCESS_ENDPOINT}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Auth-Key": TEST_INTERNAL_KEY,
+        },
+        body: JSON.stringify({
+          message: "spam",
+          chatId: "999999999",
+          requestId: "req-outbound-block",
+        }),
+      }
+    );
+    const response = await telegramWorker.fetch(
+      request as any,
+      mockEnv as any,
+      mockCtx
+    );
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/TG_CHAT_ID_BINDING|AUTHORIZED_CHAT_IDS/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("allows explicit chatId when listed in AUTHORIZED_CHAT_IDS", async () => {
+    mockEnv = createMockEnv({
+      internalKey: TEST_INTERNAL_KEY,
+      botToken: TEST_BOT_TOKEN,
+      chatId: TEST_CHAT_ID,
+      webhookSecret: undefined,
+      authorizedChatIds: "111,222,333",
+    });
+    const request = new Request(
+      `https://telegram-worker.workers.dev${PROCESS_ENDPOINT}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Auth-Key": TEST_INTERNAL_KEY,
+        },
+        body: JSON.stringify({
+          message: "to group",
+          chatId: "222",
+          requestId: "req-outbound-allow",
+        }),
+      }
+    );
+    const response = await telegramWorker.fetch(
+      request as any,
+      mockEnv as any,
+      mockCtx
+    );
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const fetchBody = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(fetchBody.chat_id).toBe("222");
+  });
+
+  test("rejects body larger than 64 KiB on /alert", async () => {
+    mockEnv = createMockEnv({
+      internalKey: TEST_INTERNAL_KEY,
+      botToken: TEST_BOT_TOKEN,
+      chatId: TEST_CHAT_ID,
+      webhookSecret: undefined,
+    });
+    const huge = "x".repeat(65 * 1024);
+    const request = new Request(
+      `https://telegram-worker.workers.dev${PROCESS_ENDPOINT}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Auth-Key": TEST_INTERNAL_KEY,
+          "Content-Length": String(huge.length + 40),
+        },
+        body: JSON.stringify({ message: huge }),
+      }
+    );
+    const response = await telegramWorker.fetch(
+      request as any,
+      mockEnv as any,
+      mockCtx
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/too large/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid chatId format on /alert", async () => {
+    mockEnv = createMockEnv({
+      internalKey: TEST_INTERNAL_KEY,
+      botToken: TEST_BOT_TOKEN,
+      chatId: TEST_CHAT_ID,
+      webhookSecret: undefined,
+      authorizedChatIds: "123456789",
+    });
+    const request = new Request(
+      `https://telegram-worker.workers.dev${PROCESS_ENDPOINT}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Auth-Key": TEST_INTERNAL_KEY,
+        },
+        body: JSON.stringify({
+          message: "bad id",
+          chatId: "../etc/passwd",
+        }),
+      }
+    );
+    const response = await telegramWorker.fetch(
+      request as any,
+      mockEnv as any,
+      mockCtx
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/invalid chatId/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("Telegram Worker Helpers", () => {
   let mockEnv: MockEnvForTest;
   const TEST_BOT_TOKEN = "test-bot-token";
-  const TEST_CHAT_ID = "default-chat-id";
+  const TEST_CHAT_ID = "123456789";
   const mockAiRun = mock();
   const mockVectorizeInsert = mock();
   const mockVectorizeQuery = mock();
@@ -759,7 +895,7 @@ describe("Telegram Worker Helpers", () => {
 describe("Telegram Worker Webhook Handler (/webhook)", () => {
   let mockEnv: MockEnvForTest;
   const TEST_BOT_TOKEN = "test-bot-token";
-  const TEST_CHAT_ID = "default-chat-id";
+  const TEST_CHAT_ID = "123456789";
   const WEBHOOK_SECRET = "test-webhook-secret";
   const WEBHOOK_ENDPOINT = "/webhook";
   const mockAiRun = mock();

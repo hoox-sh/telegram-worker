@@ -9,6 +9,7 @@ import {
   type AnalyticsEnv,
 } from "@hoox-sh/hoox-shared/analytics";
 import {
+  safeWaitUntil,
   timingSafeEqual,
   type Logger,
 } from "@hoox-sh/hoox-shared/middleware";
@@ -25,6 +26,8 @@ import {
   sendTelegramReply,
   handleGetLatestTradeSignalR2,
 } from "../logic/telegram";
+import { readJsonBody } from "../logic/body";
+import { isInboundChatAuthorized } from "../logic/chatAllowlist";
 
 /**
  * Escape text for Telegram MarkdownV2 format.
@@ -105,7 +108,7 @@ export async function handleWebhookRequest(
     return Errors.unauthorized();
   }
 
-  // 2. Parse Telegram Update
+  // 2. Parse Telegram Update (hard body-size cap — updates are small envelopes)
   // Telegram PhotoSize type for photo messages
   interface TelegramPhotoSize {
     file_id: string;
@@ -115,7 +118,7 @@ export async function handleWebhookRequest(
     file_size?: number;
   }
 
-  let update: {
+  type TelegramUpdate = {
     message?: {
       message_id: number;
       from?: { id: number };
@@ -135,15 +138,11 @@ export async function handleWebhookRequest(
       date: number;
     };
   };
-  try {
-    update = await request.json();
-    logger.debug("Received Telegram update", { update });
-  } catch (error: unknown) {
-    logger.error("Failed to parse Telegram update JSON", {
-      error: toError(error),
-    });
-    return Errors.badRequest("Invalid JSON");
-  }
+
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) return parsed.response;
+  const update = parsed.value as TelegramUpdate;
+  logger.debug("Received Telegram update", { update });
 
   const message = update.message || update.edited_message;
   if (!message || !message.chat || !message.chat.id || !message.message_id) {
@@ -161,27 +160,18 @@ export async function handleWebhookRequest(
   // AUTHORIZED_CHAT_IDS must be configured. Without it, any Telegram user who
   // can message the bot could run /kill_on or burn AI credits on photos.
   // Placeholder "__SECRET__" (wrangler template) is treated as unset.
-  const authorizedChatIds = env.AUTHORIZED_CHAT_IDS as string | undefined;
-  if (
-    !authorizedChatIds ||
-    authorizedChatIds === "__SECRET__" ||
-    !authorizedChatIds.trim()
-  ) {
-    logger.error(
-      "AUTHORIZED_CHAT_IDS not configured — rejecting webhook command (fail-closed)"
-    );
-    // Return OK so Telegram does not retry; do not execute commands
-    return new Response("OK", { status: 200 });
-  }
-  const allowedIds = authorizedChatIds
-    .split(",")
-    .map((id: string) => id.trim())
-    .filter(Boolean);
-  if (allowedIds.length === 0 || !allowedIds.includes(String(chatId))) {
-    logger.warn(
-      `Unauthorized command from chat ${chatId} (sender: ${senderId || "unknown"})`
-    );
-    // Silently return OK to not reveal existence of auth filtering
+  const inbound = isInboundChatAuthorized(chatId, env);
+  if (!inbound.allowed) {
+    if (inbound.reason === "AUTHORIZED_CHAT_IDS not configured") {
+      logger.error(
+        "AUTHORIZED_CHAT_IDS not configured — rejecting webhook command (fail-closed)"
+      );
+    } else {
+      logger.warn(
+        `Unauthorized command from chat ${chatId} (sender: ${senderId || "unknown"})`
+      );
+    }
+    // Return OK so Telegram does not retry / reveal filtering
     return new Response("OK", { status: 200 });
   }
 
@@ -210,7 +200,8 @@ export async function handleWebhookRequest(
   const messageId = String(message.message_id);
 
   // 4. Analytics Tracking (fire-and-forget)
-  ctx.waitUntil(
+  safeWaitUntil(
+    ctx,
     trackAnalytics(env as unknown as AnalyticsEnv, "/track/notification", {
       data: {
         type: "telegram_webhook",
@@ -219,7 +210,9 @@ export async function handleWebhookRequest(
           ? messageText.split(" ")[0]
           : "message",
       },
-    })
+    }),
+    (err) =>
+      logger.error("trackAnalytics failed", { error: toError(err) })
   );
 
   // 5. Command Handling & Processing
@@ -639,7 +632,8 @@ async function handlePhotoMessage(
     // 4. Store photo in R2 bucket for future reference
     const r2Key = `telegram/photos/${Date.now()}_${messageId}.${fileExt}`;
     if (env.UPLOADS_BUCKET) {
-      ctx.waitUntil(
+      safeWaitUntil(
+        ctx,
         env.UPLOADS_BUCKET.put(r2Key, photoBlob, {
           httpMetadata: { contentType: `image/${fileExt}` },
           customMetadata: {
@@ -650,7 +644,9 @@ async function handlePhotoMessage(
           },
         }).then(() => {
           logger.info(`Photo stored in R2: ${r2Key}`);
-        })
+        }),
+        (err) =>
+          logger.error("R2 photo put failed", { error: toError(err), r2Key })
       );
     }
 

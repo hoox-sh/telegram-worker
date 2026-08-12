@@ -12,7 +12,7 @@ import {
   trackAnalytics,
   type AnalyticsEnv,
 } from "@hoox-sh/hoox-shared/analytics";
-import type { Logger } from "@hoox-sh/hoox-shared/middleware";
+import { safeWaitUntil, type Logger } from "@hoox-sh/hoox-shared/middleware";
 import type { R2ObjectBody } from "@cloudflare/workers-types";
 
 /** Shape of the Telegram Bot API response we consume. */
@@ -97,14 +97,19 @@ export async function sendTelegramNotification(
   });
 
   // Track notification analytics (non-blocking)
-  ctx.waitUntil(
+  safeWaitUntil(
+    ctx,
     trackAnalytics(env as unknown as AnalyticsEnv, "/track/notification", {
       data: {
         type: "telegram",
         target: chatId,
         success: response.ok,
       },
-    })
+    }),
+    (err) =>
+      logger.error(`[${requestId}] trackAnalytics failed`, {
+        error: toError(err),
+      })
   );
 
   return responseData;

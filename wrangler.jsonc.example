@@ -26,12 +26,38 @@
     "traces": { "enabled": true, "head_sampling_rate": 0.01 }
   },
   "vars": {
-    // Secrets must be created via `wrangler secret put <NAME>`.
-    // Create via: wrangler secret put INTERNAL_KEY_BINDING
-    //            wrangler secret put TG_BOT_TOKEN_BINDING
-    //            wrangler secret put TG_CHAT_ID_BINDING
-    //            wrangler secret put TELEGRAM_SECRET_TOKEN
-    //            wrangler secret put AUTHORIZED_CHAT_IDS
+    // ── Secrets (create via `wrangler secret put <NAME>`) ──────────────────
+    //
+    // INTERNAL_KEY_BINDING (or TELEGRAM_INTERNAL_KEY_BINDING):
+    //   Service-to-service auth for POST /alert and /process (fail-closed).
+    //   Header: X-Internal-Auth-Key
+    //
+    // TG_BOT_TOKEN_BINDING:
+    //   Telegram Bot API token from @BotFather.
+    //
+    // TG_CHAT_ID_BINDING:
+    //   Default numeric chat ID for mesh alerts that omit chatId.
+    //   Must be digits only (optional leading `-` for groups/channels).
+    //
+    // TELEGRAM_SECRET_TOKEN:
+    //   Shared secret for POST /webhook (X-Telegram-Bot-Api-Secret-Token).
+    //   Fail-closed + timing-safe compare. Required in production.
+    //
+    // AUTHORIZED_CHAT_IDS:
+    //   Comma-separated numeric chat IDs.
+    //   - Inbound /webhook: fail-closed when unset (commands silently dropped).
+    //   - Outbound /alert: when set, destination must be on this list;
+    //     when unset, only TG_CHAT_ID_BINDING is permitted (blocks arbitrary
+    //     chatId overrides if an internal key leaks).
+    //   Align with hoox-worker TELEGRAM_ALLOWED_CHAT_IDS (public notify path
+    //   is fail-closed on the gateway independently of this worker).
+    //
+    // Create via:
+    //   wrangler secret put INTERNAL_KEY_BINDING
+    //   wrangler secret put TG_BOT_TOKEN_BINDING
+    //   wrangler secret put TG_CHAT_ID_BINDING
+    //   wrangler secret put TELEGRAM_SECRET_TOKEN
+    //   wrangler secret put AUTHORIZED_CHAT_IDS
   },
   "kv_namespaces": [
     {

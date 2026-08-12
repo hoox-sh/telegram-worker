@@ -17,6 +17,7 @@ import type { AnalyticsEnv } from "@hoox-sh/hoox-shared/analytics";
 import {
   createLogger,
   requireInternalAuth,
+  safeWaitUntil,
   withRequestLog,
 } from "@hoox-sh/hoox-shared/middleware";
 import { TELEGRAM_ALERT_AUTH_KEY_FIELDS } from "@hoox-sh/hoox-shared/service-bindings";
@@ -31,6 +32,8 @@ import {
   queryEmbeddings,
 } from "./logic/rag";
 import { handleGetLatestTradeSignalR2 } from "./logic/telegram";
+import { readJsonBody } from "./logic/body";
+import { checkOutboundChatId } from "./logic/chatAllowlist";
 
 // --- Type Definitions ---
 
@@ -60,6 +63,14 @@ const logger = createLogger({ service: "telegram-worker", module: "router" });
 
 const router = createRouter<Env>();
 
+function scheduleKvTimestamp(env: Env, ctx: ExecutionContext): void {
+  safeWaitUntil(
+    ctx,
+    logKvTimestamp(env, "CONFIG_KV"),
+    (err) => logger.error("logKvTimestamp failed", { error: String(err) })
+  );
+}
+
 // Define routes
 router.get(
   "/health",
@@ -73,11 +84,7 @@ router.get(
 router.post(
   ALERT_ENDPOINT,
   async (request: Request, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(
-      logKvTimestamp(env, "CONFIG_KV").catch((err) =>
-        logger.error("logKvTimestamp failed", { error: String(err) })
-      )
-    );
+    scheduleKvTimestamp(env, ctx);
     return await handleAlertRequest(request, env, ctx);
   }
 );
@@ -86,11 +93,7 @@ router.post(
 router.post(
   PROCESS_ENDPOINT,
   async (request: Request, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(
-      logKvTimestamp(env, "CONFIG_KV").catch((err) =>
-        logger.error("logKvTimestamp failed", { error: String(err) })
-      )
-    );
+    scheduleKvTimestamp(env, ctx);
     return await handleAlertRequest(request, env, ctx);
   }
 );
@@ -100,11 +103,7 @@ router.post(
 router.post(
   WEBHOOK_ENDPOINT,
   async (request: Request, env: Env, ctx: ExecutionContext) => {
-    ctx.waitUntil(
-      logKvTimestamp(env, "CONFIG_KV").catch((err) =>
-        logger.error("logKvTimestamp failed", { error: String(err) })
-      )
-    );
+    scheduleKvTimestamp(env, ctx);
     return await handleWebhookRequest(request, env, ctx, logger);
   }
 );
@@ -127,6 +126,7 @@ export default {
  *  2. Flat: { requestId?, message, chatId? }
  *
  * Auth is checked BEFORE body parsing (fail-fast).
+ * Outbound chatId is allowlist-gated (see checkOutboundChatId).
  */
 async function handleAlertRequest(
   request: Request,
@@ -144,12 +144,9 @@ async function handleAlertRequest(
     );
     if (authResult) return authResult;
 
-    let raw: unknown;
-    try {
-      raw = await request.json();
-    } catch {
-      return Errors.badRequest("Invalid JSON");
-    }
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const raw = parsed.value;
 
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       return Errors.badRequest("Request body must be a JSON object");
@@ -205,6 +202,36 @@ async function handleAlertRequest(
       );
     }
 
+    // Resolve destination before send (default binding when chatId omitted)
+    const effectiveChatId =
+      notification.chatId ??
+      (typeof env.TG_CHAT_ID_BINDING === "string"
+        ? env.TG_CHAT_ID_BINDING
+        : undefined);
+
+    if (!effectiveChatId) {
+      return Errors.internal("Telegram chatId not configured");
+    }
+
+    const chatCheck = checkOutboundChatId(effectiveChatId, env);
+    if (!chatCheck.allowed) {
+      logger.warn(
+        `[${incomingRequestId}] outbound chatId blocked`,
+        { reason: chatCheck.reason }
+      );
+      return createJsonResponse(
+        {
+          success: false,
+          error: chatCheck.reason ?? "chatId not permitted",
+          requestId: incomingRequestId,
+        },
+        chatCheck.normalized ? 403 : 400
+      );
+    }
+
+    // Pass normalized chatId so send path does not re-resolve to an unchecked value
+    notification.chatId = chatCheck.normalized;
+
     const result = await sendTelegramNotification(
       notification,
       env,
@@ -229,4 +256,6 @@ export {
   insertEmbeddings,
   queryEmbeddings,
   handleGetLatestTradeSignalR2,
+  checkOutboundChatId,
+  readJsonBody,
 };

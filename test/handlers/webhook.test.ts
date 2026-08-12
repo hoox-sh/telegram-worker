@@ -170,6 +170,63 @@ describe("handleWebhookRequest", () => {
     expect(response.status).toBe(400);
   });
 
+  test("returns 400 when webhook body exceeds size limit", async () => {
+    const huge = "x".repeat(65 * 1024);
+    const request = new Request("http://test.com/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Api-Secret-Token": "test-webhook-secret",
+        "Content-Length": String(huge.length + 50),
+      },
+      body: JSON.stringify({ update_id: 1, message: { text: huge } }),
+    });
+
+    const response = await handleWebhookRequest(
+      request,
+      mockEnv,
+      mockCtx,
+      mockLogger
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/too large/i);
+  });
+
+  test("silently drops when AUTHORIZED_CHAT_IDS is placeholder __SECRET__", async () => {
+    mockEnv.AUTHORIZED_CHAT_IDS = "__SECRET__";
+    const putMock = mockEnv.CONFIG_KV.put;
+
+    const request = new Request("http://test.com/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Bot-Api-Secret-Token": "test-webhook-secret",
+      },
+      body: JSON.stringify({
+        update_id: 1,
+        message: {
+          message_id: 1,
+          chat: { id: 987654321, type: "private" },
+          date: Math.floor(Date.now() / 1000),
+          text: "/kill_on",
+          from: { id: 1, is_bot: false, first_name: "T" },
+        },
+      }),
+    });
+
+    const response = await handleWebhookRequest(
+      request,
+      mockEnv,
+      mockCtx,
+      mockLogger
+    );
+
+    expect(response.status).toBe(200);
+    expect(putMock).not.toHaveBeenCalled();
+  });
+
   test("returns 200 for message without required fields", async () => {
     const request = new Request("http://test.com/webhook", {
       method: "POST",
