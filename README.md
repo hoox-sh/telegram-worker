@@ -57,6 +57,18 @@ web3-wallet ──┘        │
 bun test workers/telegram-worker
 ```
 
+### Secrets & chat allowlists
+
+| Secret | Role |
+| ------ | ---- |
+| `TG_BOT_TOKEN_BINDING` | Bot API token |
+| `TG_CHAT_ID_BINDING` | Default destination when `chatId` omitted |
+| `TELEGRAM_SECRET_TOKEN` | Telegram webhook header secret (fail-closed) |
+| `INTERNAL_KEY_BINDING` | Mesh `X-Internal-Auth-Key` for `/alert` |
+| `AUTHORIZED_CHAT_IDS` | Comma-separated IDs; inbound `/webhook` fail-closed when unset; outbound `/alert` allowlist (else only `TG_CHAT_ID_BINDING`) |
+
+Align `AUTHORIZED_CHAT_IDS` with gateway `TELEGRAM_ALLOWED_CHAT_IDS`. Local: copy [`.dev.vars.example`](./.dev.vars.example) → `.dev.vars`.
+
 ### Mesh interconnect
 
 | Direction | Peers |

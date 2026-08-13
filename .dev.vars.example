@@ -8,5 +8,14 @@ INTERNAL_KEY_BINDING=your_internal_key_binding_here
 # Telegram Bot Token (get from @BotFather on Telegram)
 TG_BOT_TOKEN_BINDING=your_telegram_bot_token_here
 
-# Comma-separated list of authorized chat IDs
+# Default chat ID for mesh alerts that omit chatId (digits only; optional leading -)
+TG_CHAT_ID_BINDING=12345678
+
+# Telegram webhook secret (X-Telegram-Bot-Api-Secret-Token) — required in production
+TELEGRAM_SECRET_TOKEN=your_telegram_webhook_secret_here
+
+# Comma-separated authorized chat IDs
+# - Inbound /webhook: fail-closed when unset
+# - Outbound /alert: when set, destination must be listed; when unset only TG_CHAT_ID_BINDING
+# Align with hoox-worker TELEGRAM_ALLOWED_CHAT_IDS
 AUTHORIZED_CHAT_IDS=12345678,87654321
