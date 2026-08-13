@@ -1,44 +1,27 @@
 {
   "display_name": "Telegram Worker",
-  "description": "Telegram bot notifications and alerts — outbound chat allowlist is AUTHORIZED_CHAT_IDS secret (CLI); bot:* keys for preferences",
+  "description": "Outbound chat defaults and allowlists are secrets (TG_CHAT_ID_BINDING, AUTHORIZED_CHAT_IDS) — not CONFIG_KV. No live bot:* toggles.",
   "sections": {
     "bot": {
-      "title": "Bot Settings",
-      "description": "Telegram bot configuration stored under bot:* in CONFIG_KV",
+      "title": "Secrets (CLI)",
+      "description": "There are no runtime bot:* KV toggles. Configure via wrangler secrets.",
       "icon": "send",
       "priority": 10,
       "fields": {
-        "enabled": true,
-        "default_chat_id": "",
-        "notify_on_execution": true,
-        "notify_on_error": true,
-        "notify_on_startup": false,
+        "default_chat_id": "Requires CLI Setup",
+        "authorized_chat_ids": "Requires CLI Setup",
       },
       "descriptions": {
-        "enabled": "Enable or disable all outgoing Telegram notifications globally (bot:enabled).",
-        "default_chat_id": "Default chat ID when callers omit chatId (bot:default_chat_id). Must also pass AUTHORIZED_CHAT_IDS outbound allowlist.",
-        "notify_on_execution": "Send a message immediately upon a successful trade execution.",
-        "notify_on_error": "Send a critical alert when a worker encounters an error.",
-        "notify_on_startup": "Send a health check message when the system is initialized.",
+        "default_chat_id": "TG_CHAT_ID_BINDING — default chat when callers omit chatId.",
+        "authorized_chat_ids": "AUTHORIZED_CHAT_IDS — comma-separated outbound/inbound allowlist (fail-closed when unset for commands).",
       },
-    },
-    "bot_ai": {
-      "title": "AI Summaries",
-      "description": "AI-powered summary preferences (bot:* keys — not analytics ai:)",
-      "icon": "sparkles",
-      "priority": 20,
-      "fields": {
-        "ai_summaries_enabled": true,
-        "summary_style": "concise",
-        "include_pnl": true,
+      "secrets": {
+        "default_chat_id": true,
+        "authorized_chat_ids": true,
       },
-      "options": {
-        "summary_style": ["concise", "detailed", "technical"],
-      },
-      "descriptions": {
-        "ai_summaries_enabled": "Enable AI to periodically summarize your portfolio and recent trades (bot:ai_summaries_enabled).",
-        "summary_style": "The tone and depth of the AI summary (bot:summary_style).",
-        "include_pnl": "Include sensitive Profit and Loss (PnL) statistics in the Telegram summary.",
+      "secret_commands": {
+        "default_chat_id": "hoox secrets set telegram-worker TG_CHAT_ID_BINDING",
+        "authorized_chat_ids": "hoox secrets set telegram-worker AUTHORIZED_CHAT_IDS",
       },
     },
   },
