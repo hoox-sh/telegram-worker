@@ -75,6 +75,17 @@
       "bucket_name": "user-uploads"
     }
   ],
+  // RAG: same index as hoox-worker. 768 dimensions (@cf/baai/bge-base-en-v1.5).
+  //   wrangler vectorize create my-rag-index --dimensions=768 --metric=cosine
+  "vectorize": [
+    {
+      "binding": "VECTORIZE_INDEX",
+      "index_name": "my-rag-index"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
   "services": [
     {
       "binding": "ANALYTICS_SERVICE",
