@@ -15,6 +15,7 @@ import {
 } from "@hoox-sh/hoox-shared/middleware";
 import { KVKeys } from "@hoox-sh/hoox-shared/kvKeys";
 import { checkKillSwitch } from "@hoox-sh/hoox-shared/kill-switch";
+import { scopeR2Key } from "@hoox-sh/hoox-shared/tenant";
 import {
   generateEmbeddings,
   queryEmbeddings,
@@ -28,6 +29,7 @@ import {
 } from "../logic/telegram";
 import { readJsonBody } from "../logic/body";
 import { isInboundChatAuthorized } from "../logic/chatAllowlist";
+import type { Env } from "../index";
 
 /**
  * Escape text for Telegram MarkdownV2 format.
@@ -68,7 +70,11 @@ function sanitizeRagText(raw: string, maxLen = 1500): string {
 /** Validate Telegram CDN file_path to prevent open redirects / SSRF. */
 function isSafeTelegramFilePath(filePath: string): boolean {
   if (!filePath || filePath.length > 512) return false;
-  if (filePath.includes("..") || filePath.includes("\\") || filePath.includes("://")) {
+  if (
+    filePath.includes("..") ||
+    filePath.includes("\\") ||
+    filePath.includes("://")
+  ) {
     return false;
   }
   // Telegram file paths are relative keys like "photos/file_123.jpg"
@@ -211,8 +217,7 @@ export async function handleWebhookRequest(
           : "message",
       },
     }),
-    (err) =>
-      logger.error("trackAnalytics failed", { error: toError(err) })
+    (err) => logger.error("trackAnalytics failed", { error: toError(err) })
   );
 
   // 5. Command Handling & Processing
@@ -447,7 +452,7 @@ export async function handleWebhookRequest(
 
           let aiResponse: { response: string };
           try {
-            aiResponse = (await Promise.race([
+            aiResponse = await Promise.race([
               env.AI.run("@cf/meta/llama-3-8b-instruct", {
                 messages: [
                   { role: "system", content: systemPrompt },
@@ -460,7 +465,7 @@ export async function handleWebhookRequest(
                   20000
                 );
               }),
-            ]));
+            ]);
           } catch (aiError: unknown) {
             logger.error("Error calling AI during /ask", {
               error: toError(aiError),
@@ -629,8 +634,12 @@ async function handlePhotoMessage(
     const photoBlob = await photoResponse.blob();
     const photoArrayBuffer = await photoBlob.arrayBuffer();
 
-    // 4. Store photo in R2 bucket for future reference
-    const r2Key = `telegram/photos/${Date.now()}_${messageId}.${fileExt}`;
+    // 4. Store photo in R2 bucket for future reference.
+    // Opt-in tenant isolation (identity when TENANT_MODE is off).
+    const r2Key = scopeR2Key(
+      env,
+      `telegram/photos/${Date.now()}_${messageId}.${fileExt}`
+    );
     if (env.UPLOADS_BUCKET) {
       safeWaitUntil(
         ctx,
@@ -671,7 +680,7 @@ async function handlePhotoMessage(
 
     let aiResponse: { response?: string };
     try {
-      aiResponse = (await Promise.race([
+      aiResponse = await Promise.race([
         env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
           messages: [
             {
@@ -693,7 +702,7 @@ async function handlePhotoMessage(
             25000
           );
         }),
-      ]));
+      ]);
     } catch (aiError: unknown) {
       logger.error("Error calling AI vision model", {
         error: toError(aiError),
