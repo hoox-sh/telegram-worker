@@ -6,14 +6,14 @@
 import {
   type EnvWithKV,
   logKvTimestamp,
-} from "@hoox-sh/hoox-shared/kvUtils"; // Import shared function
+} from "@hoox-sh/hoox-shared/kvUtils";
 // KVNamespace, Ai, VectorizeIndex, R2Bucket types are globally available from worker-configuration.d.ts
 import {
   Errors,
   createJsonResponse,
   toError,
 } from "@hoox-sh/hoox-shared/errors";
-import type { AnalyticsEnv } from "@hoox-sh/hoox-shared/analytics";
+// Cloudflare.Env already carries CONFIG_KV, REPORT_KV, ANALYTICS_SERVICE.
 import {
   createLogger,
   requireInternalAuth,
@@ -37,12 +37,8 @@ import { checkOutboundChatId } from "./logic/chatAllowlist";
 
 // --- Type Definitions ---
 
-export interface Env extends Cloudflare.Env, AnalyticsEnv, EnvWithKV {
-  CONFIG_KV: KVNamespace;
-  UPLOADS_BUCKET: R2Bucket;
-  VECTORIZE_INDEX: VectorizeIndex;
-  AI: Ai;
-  ANALYTICS_SERVICE: Fetcher;
+export interface Env extends Cloudflare.Env {
+  [key: string]: unknown;
 }
 
 // Payload structure for incoming requests (both /process and /webhook)
@@ -66,7 +62,7 @@ const router = createRouter<Env>();
 function scheduleKvTimestamp(env: Env, ctx: ExecutionContext): void {
   safeWaitUntil(
     ctx,
-    logKvTimestamp(env, "CONFIG_KV"),
+    logKvTimestamp(env as EnvWithKV, "CONFIG_KV"),
     (err) => logger.error("logKvTimestamp failed", { error: String(err) })
   );
 }
